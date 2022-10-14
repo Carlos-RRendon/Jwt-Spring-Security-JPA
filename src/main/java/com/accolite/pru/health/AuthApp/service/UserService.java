@@ -104,7 +104,7 @@ public class UserService {
         newUser.setUsername(registerRequest.getUsername());
         newUser.addRoles(getRolesForNewUser(isNewUserAsAdmin));
         newUser.setActive(true);
-        newUser.setEmailVerified(false);
+        newUser.setEmailVerified(true);
         return newUser;
     }
 
