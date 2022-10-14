@@ -78,6 +78,43 @@ public class AuthController {
         return ResponseEntity.ok(new ApiResponse(true, usernameExists.toString()));
     }
 
+    /**
+     * Entry point for the user registration process. On successful registration,
+     * publish an event to generate email verification token
+     */
+    @PostMapping("/register")
+    @ApiOperation(value = "Registers the user and publishes an event to generate the email verification")
+    public ResponseEntity registerUser(@RequestBody RegistrationRequest registrationRequest) {
+
+        /*
+        return authService.registerUser(registrationRequest)
+                .map(user -> {
+                    UriComponentsBuilder urlBuilder = ServletUriComponentsBuilder.fromCurrentContextPath().path("/api/auth/registrationConfirmation");
+                    OnUserRegistrationCompleteEvent onUserRegistrationCompleteEvent = new OnUserRegistrationCompleteEvent(user, urlBuilder);
+                    applicationEventPublisher.publishEvent(onUserRegistrationCompleteEvent);
+                    logger.info("Registered User returned [API[: " + user);
+                    return ResponseEntity.ok(new ApiResponse(true, "User registered successfully. Check your email for verification"));
+                })
+                .orElseThrow(() -> new UserRegistrationException(registrationRequest.getEmail(), "Missing user object in database"));
+
+         */
+        authService.registerUser(registrationRequest);
+        return ResponseEntity.ok(new ApiResponse(true,"User registered successfully. Check your email for verification"));
+    }
+
+    /**
+     * Confirm the email verification token generated for the user during
+     * registration. If token is invalid or token is expired, report error.
+     */
+    @GetMapping("/registrationConfirmation")
+    @ApiOperation(value = "Confirms the email verification token that has been generated for the user during registration")
+    public ResponseEntity confirmRegistration(@ApiParam(value = "the token that was sent to the user email") @RequestParam("token") String token) {
+
+        return authService.confirmEmailRegistration(token)
+                .map(user -> ResponseEntity.ok(new ApiResponse(true, "User verified successfully")))
+                .orElseThrow(() -> new InvalidTokenRequestException("Email Verification Token", token, "Failed to confirm. Please generate a new email verification request"));
+    }
+
 
     /**
      * Entry point for the user log in. Return the jwt auth token and the refresh token
@@ -102,29 +139,7 @@ public class AuthController {
                 .orElseThrow(() -> new UserLoginException("Couldn't create refresh token for: [" + loginRequest + "]"));
     }
 
-    /**
-     * Entry point for the user registration process. On successful registration,
-     * publish an event to generate email verification token
-     */
-    @PostMapping("/register")
-    @ApiOperation(value = "Registers the user and publishes an event to generate the email verification")
-    public ResponseEntity registerUser(@RequestBody RegistrationRequest registrationRequest) {
 
-        /*
-        return authService.registerUser(registrationRequest)
-                .map(user -> {
-                    UriComponentsBuilder urlBuilder = ServletUriComponentsBuilder.fromCurrentContextPath().path("/api/auth/registrationConfirmation");
-                    OnUserRegistrationCompleteEvent onUserRegistrationCompleteEvent = new OnUserRegistrationCompleteEvent(user, urlBuilder);
-                    applicationEventPublisher.publishEvent(onUserRegistrationCompleteEvent);
-                    logger.info("Registered User returned [API[: " + user);
-                    return ResponseEntity.ok(new ApiResponse(true, "User registered successfully. Check your email for verification"));
-                })
-                .orElseThrow(() -> new UserRegistrationException(registrationRequest.getEmail(), "Missing user object in database"));
-
-         */
-        authService.registerUser(registrationRequest);
-        return ResponseEntity.ok(new ApiResponse(true,"User registered successfully. Check your email for verification"));
-    }
 
     /**
      * Receives the reset link request and publishes an event to send email id containing
@@ -167,18 +182,6 @@ public class AuthController {
                 .orElseThrow(() -> new PasswordResetException(passwordResetRequest.getToken(), "Error in resetting password"));
     }
 
-    /**
-     * Confirm the email verification token generated for the user during
-     * registration. If token is invalid or token is expired, report error.
-     */
-    @GetMapping("/registrationConfirmation")
-    @ApiOperation(value = "Confirms the email verification token that has been generated for the user during registration")
-    public ResponseEntity confirmRegistration(@ApiParam(value = "the token that was sent to the user email") @RequestParam("token") String token) {
-
-        return authService.confirmEmailRegistration(token)
-                .map(user -> ResponseEntity.ok(new ApiResponse(true, "User verified successfully")))
-                .orElseThrow(() -> new InvalidTokenRequestException("Email Verification Token", token, "Failed to confirm. Please generate a new email verification request"));
-    }
 
     /**
      * Resend the email registration mail with an updated token expiry. Safe to
