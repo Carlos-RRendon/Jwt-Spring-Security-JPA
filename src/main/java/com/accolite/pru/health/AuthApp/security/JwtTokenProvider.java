@@ -14,6 +14,14 @@
 package com.accolite.pru.health.AuthApp.security;
 
 import com.accolite.pru.health.AuthApp.model.CustomUserDetails;
+import com.nimbusds.jose.*;
+import com.nimbusds.jose.crypto.RSAEncrypter;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.jwk.KeyUse;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -26,6 +34,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -45,15 +54,64 @@ public class JwtTokenProvider {
      * so that a new jwt can be created
      */
     public String generateToken(CustomUserDetails customUserDetails) {
+
+
+
         Instant expiryDate = Instant.now().plusMillis(jwtExpirationInMs);
         String authorities = getUserAuthorities(customUserDetails);
-        return Jwts.builder()
+        /*return Jwts.builder()
                 .setSubject(Long.toString(customUserDetails.getId()))
                 .setIssuedAt(Date.from(Instant.now()))
                 .setExpiration(Date.from(expiryDate))
                 .signWith(SignatureAlgorithm.HS512, jwtSecret)
                 .claim(AUTHORITIES_CLAIM, authorities)
                 .compact();
+
+         */
+
+        try {
+
+            RSAKey senderJWK = new RSAKeyGenerator(2048)
+                    .keyID("123")
+                    .keyUse(KeyUse.SIGNATURE)
+                    .generate();
+            RSAKey senderPueblicJWK = senderJWK.toPublicJWK();
+
+            RSAKey recipentJWK = new RSAKeyGenerator(2048)
+                    .keyID("456")
+                    .keyUse(KeyUse.ENCRYPTION)
+                    .generate();
+            RSAKey recipientPublicJWK = recipentJWK.toPublicJWK();
+
+            JWTClaimsSet jwtClaims = new JWTClaimsSet.Builder()
+                    .subject(Long.toString(customUserDetails.getId()))
+                    .expirationTime(Date.from(expiryDate))
+                    .issueTime(Date.from(Instant.now()))
+                    .claim(AUTHORITIES_CLAIM,authorities)
+                    .jwtID(UUID.randomUUID().toString())
+                    .build();
+
+            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(senderJWK.getKeyID()).build();
+
+            SignedJWT signedJWT = new SignedJWT(header,jwtClaims);
+
+            signedJWT.sign(new RSASSASigner(senderJWK));
+
+            JWEObject jweObject = new JWEObject(
+                    new JWEHeader.Builder(JWEAlgorithm.RSA_OAEP_256, EncryptionMethod.A256GCM)
+                            .contentType("JWT")
+                            .build(),
+                    new Payload(signedJWT)
+            );
+
+            jweObject.encrypt(new RSAEncrypter(recipentJWK));
+
+            String jwtString = jweObject.serialize();
+            return jwtString;
+        } catch (JOSEException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     /**
