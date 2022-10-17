@@ -23,6 +23,8 @@ import com.accolite.pru.health.AuthApp.model.payload.LogOutRequest;
 import com.accolite.pru.health.AuthApp.model.payload.UpdatePasswordRequest;
 import com.accolite.pru.health.AuthApp.service.AuthService;
 import com.accolite.pru.health.AuthApp.service.UserService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -32,13 +34,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/user")
@@ -68,7 +67,8 @@ public class UserController {
     @PreAuthorize("hasRole('USER')")
     @ApiOperation(value = "Returns the current user profile")
     public ResponseEntity getUserProfile(@CurrentUser CustomUserDetails currentUser) {
-        logger.info(currentUser.getEmail() + " has role: " + currentUser.getRoles());
+        String roles = currentUser.getRoles().stream().map(r -> r.getRole()).toString();
+        logger.info(currentUser.getEmail() + " has role: " + roles );
         return ResponseEntity.ok("Hello. This is about me");
     }
 
@@ -117,4 +117,20 @@ public class UserController {
         applicationEventPublisher.publishEvent(logoutSuccessEvent);
         return ResponseEntity.ok(new ApiResponse(true, "Log out successful"));
     }
+
+    @GetMapping("/accounts")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ApiOperation(value = "Return the list of accounts")
+    public ResponseEntity getAllAccounts() throws IOException{
+
+        logger.info("Inside secured resource with admin");
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode json = mapper.readTree("{\"accounts\":[{\"account\":\"*98\",\"balance\":989.00,\"status\":\"active\"},{\"account\":\"**99\",\"balance\":10000.00,\"status\":\"active\"},{\"account\":\"**100\",\"balance\":5897.40,\"status\":\"inactive\"}],\"total\":3}");
+        return ResponseEntity.ok(json);
+
+    }
+
 }
+
+
+
