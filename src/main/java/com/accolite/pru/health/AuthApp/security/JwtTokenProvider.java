@@ -17,14 +17,12 @@ import com.accolite.pru.health.AuthApp.model.CustomUserDetails;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.RSAEncrypter;
 import com.nimbusds.jose.crypto.RSASSASigner;
-import com.nimbusds.jose.jwk.KeyUse;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -34,7 +32,6 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -44,9 +41,17 @@ public class JwtTokenProvider {
     private final String jwtSecret;
     private final long jwtExpirationInMs;
 
-    public JwtTokenProvider(@Value("${app.jwt.secret}") String jwtSecret, @Value("${app.jwt.expiration}") long jwtExpirationInMs) {
+    @Autowired
+    private final RecipentKey recipentKey;
+
+    @Autowired
+    private final SenderKey senderKey;
+
+    public JwtTokenProvider(@Value("${app.jwt.secret}") String jwtSecret, @Value("${app.jwt.expiration}") long jwtExpirationInMs, RecipentKey recipentKey, SenderKey senderKey) {
         this.jwtSecret = jwtSecret;
         this.jwtExpirationInMs = jwtExpirationInMs;
+        this.recipentKey = recipentKey;
+        this.senderKey = senderKey;
     }
 
     /**
@@ -54,7 +59,6 @@ public class JwtTokenProvider {
      * so that a new jwt can be created
      */
     public String generateToken(CustomUserDetails customUserDetails) {
-
 
 
         Instant expiryDate = Instant.now().plusMillis(jwtExpirationInMs);
@@ -71,40 +75,28 @@ public class JwtTokenProvider {
 
         try {
 
-            RSAKey senderJWK = new RSAKeyGenerator(2048)
-                    .keyID("123")
-                    .keyUse(KeyUse.SIGNATURE)
-                    .generate();
-            RSAKey senderPueblicJWK = senderJWK.toPublicJWK();
-
-            RSAKey recipentJWK = new RSAKeyGenerator(2048)
-                    .keyID("456")
-                    .keyUse(KeyUse.ENCRYPTION)
-                    .generate();
-            RSAKey recipientPublicJWK = recipentJWK.toPublicJWK();
 
             JWTClaimsSet jwtClaims = new JWTClaimsSet.Builder()
                     .subject(Long.toString(customUserDetails.getId()))
                     .expirationTime(Date.from(expiryDate))
                     .issueTime(Date.from(Instant.now()))
                     .claim(AUTHORITIES_CLAIM,authorities)
-                    .jwtID(UUID.randomUUID().toString())
+                   //.jwtID(UUID.randomUUID().toString())
                     .build();
 
-            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(senderJWK.getKeyID()).build();
+            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256).keyID( senderKey.getSenderJWK().getKeyID()).build();
 
             SignedJWT signedJWT = new SignedJWT(header,jwtClaims);
 
-            signedJWT.sign(new RSASSASigner(senderJWK));
+            signedJWT.sign(new RSASSASigner(senderKey.getSenderJWK()));
 
             JWEObject jweObject = new JWEObject(
                     new JWEHeader.Builder(JWEAlgorithm.RSA_OAEP_256, EncryptionMethod.A256GCM)
                             .contentType("JWT")
                             .build(),
-                    new Payload(signedJWT)
-            );
+                    new Payload(signedJWT));
 
-            jweObject.encrypt(new RSAEncrypter(recipentJWK));
+            jweObject.encrypt(new RSAEncrypter(recipentKey.getRecipientPublicJWK()));
 
             String jwtString = jweObject.serialize();
             return jwtString;
